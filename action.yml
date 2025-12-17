@@ -1,0 +1,23 @@
+name: 'Version Bot (comment-driven)'
+description: 'Bump/set project version for Maven/Gradle from PR comment'
+author: 'SeongHo5'
+inputs:
+  repo-token:
+    description: 'A token for the repo'
+    default: ${{ github.token }}
+    required: false
+  comment:
+    required: true
+    description: "Comment"
+  commandPrefix:
+    required: false
+    default: "/bump"
+    description: "Command prefix"
+  tool:
+    required: false
+    default: "auto"
+    description: "Build Tool"
+  commitMessageTemplate:
+    required: false
+    default: "chore(version): {tool} {before} -> {after}"
+    description: "Commit message template"
