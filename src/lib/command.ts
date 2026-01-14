@@ -19,50 +19,42 @@ export type ParsedLine = {
     options: ParsedOptions;
 };
 
-function escapeRegExp(s: string): string {
+const escapeRegExp = (s: string): string => {
     return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function parseCommandLine(
+export const parseCommandLine = (
     commentBody: string,
     prefix: string,
     defaultBump: BumpStrategy
-): ParsedLine | null {
+): ParsedLine | null => {
     const firstLine = (commentBody ?? "").split(/\r?\n/)[0]?.trim() ?? "";
-    if (!firstLine.startsWith(prefix)) return null;
+    if (!firstLine.startsWith(prefix)) {
+        return null;
+    }
 
     const p = escapeRegExp(prefix);
 
-    // prefix 제거하고 토큰화
     const rest = firstLine.replace(new RegExp(`^${p}\\s*`), "").trim();
-    if (!rest) throw new Error(`명령 형식 오류. 예) ${prefix} bump patch | ${prefix} set 1.2.3`);
+    if (!rest) {
+        throw new Error(`Invalid command format. e.g. ${prefix} bump patch | ${prefix} set 1.2.3`);
+    }
 
     const tokens = tokenize(rest);
-    // tokens 예: ["bump","patch","--tool","gradle","--dryRun","true"]
 
     const verb = (tokens.shift() ?? "").toLowerCase();
     if (verb !== "bump" && verb !== "set") {
-        throw new Error(`명령 형식 오류. 예) ${prefix} bump patch | ${prefix} set 1.2.3`);
+        throw new Error(`Invalid command format. e.g. ${prefix} bump patch | ${prefix} set 1.2.3`);
     }
 
     let command: VersionCommand;
     if (verb === "bump") {
-        const arg = (tokens.shift() ?? "").toLowerCase();
-        if (!arg) throw new Error(`bump 인자가 필요. 예) ${prefix} bump patch`);
-
-        const strategy: BumpStrategy =
-            arg === "+1" ? defaultBump :
-                arg === "patch" ? "patch" :
-                    arg === "minor" ? "minor" :
-                        arg === "major" ? "major" :
-                            (() => {
-                                throw new Error(`bump 인자 오류: ${arg} (patch|minor|major|+1)`);
-                            })();
-
+        const arg = tokens.shift();
+        const strategy = parseBumpStrategy(arg ?? "", defaultBump);
         command = {kind: "bump", strategy};
     } else {
         const version = tokens.shift();
-        if (!version) throw new Error(`set 버전이 필요. 예) ${prefix} set 1.2.3`);
+        if (!version) throw new Error(`Missing version for set command. e.g. ${prefix} set 1.2.3`);
         command = {kind: "set", version};
     }
 
@@ -70,13 +62,9 @@ export function parseCommandLine(
     return {command, options};
 }
 
-/**
- * 공백 기준 토큰화 + 따옴표 지원
- *  - --target "some path/pom.xml" 가능
- */
-function tokenize(s: string): string[] {
+const tokenize = (s: string): string[] => {
     const out: string[] = [];
-    let cur = "";
+    let current = "";
     let quote: "'" | '"' | null = null;
 
     for (let i = 0; i < s.length; i++) {
@@ -86,7 +74,7 @@ function tokenize(s: string): string[] {
             if (ch === quote) {
                 quote = null;
             } else {
-                cur += ch;
+                current += ch;
             }
             continue;
         }
@@ -97,36 +85,46 @@ function tokenize(s: string): string[] {
         }
 
         if (/\s/.test(ch)) {
-            if (cur.length) {
-                out.push(cur);
-                cur = "";
+            if (current.length) {
+                out.push(current);
+                current = "";
             }
             continue;
         }
 
-        cur += ch;
+        current += ch;
     }
 
-    if (quote) throw new Error("따옴표가 닫히지 않았음");
-    if (cur.length) out.push(cur);
+    if (quote) {
+        throw new Error("Unclosed quote detected.");
+    }
+    if (current.length) {
+        out.push(current);
+    }
 
     return out;
 }
 
-function parseFlags(tokens: string[]): ParsedOptions {
+const parseFlags = (tokens: string[]): ParsedOptions => {
     const opts: ParsedOptions = {};
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
-        if (!t.startsWith("--")) throw new Error(`옵션 형식 오류: ${t}`);
+        if (!t.startsWith("--")) {
+            throw new Error(`Invalid option format: ${t}`);
+        }
 
         const key = t.slice(2);
-        const val = tokens[i + 1]; // key-value 형태만 지원
-        if (!val || val.startsWith("--")) throw new Error(`옵션 값 필요: --${key} <value>`);
+        const val = tokens[i + 1];
+        if (!val || val.startsWith("--")) {
+            throw new Error(`Missing value for option: --${key} <value>`);
+        }
         i++;
 
         switch (key) {
             case "tool":
-                if (!isOneOf(val, ["auto", "maven", "gradle"])) throw new Error(`--tool 값 오류: ${val}`);
+                if (!isOneOf(val, ["auto", "maven", "gradle"])) {
+                    throw new Error(`Invalid value for --tool: ${val}`);
+                }
                 opts.tool = val as ToolOption;
                 break;
 
@@ -135,7 +133,9 @@ function parseFlags(tokens: string[]): ParsedOptions {
                 break;
 
             case "prefer":
-                if (!isOneOf(val, ["maven", "gradle"])) throw new Error(`--prefer 값 오류: ${val}`);
+                if (!isOneOf(val, ["maven", "gradle"])) {
+                    throw new Error(`Invalid value for --prefer: ${val}`);
+                }
                 opts.prefer = val as PreferOption;
                 break;
 
@@ -148,19 +148,45 @@ function parseFlags(tokens: string[]): ParsedOptions {
                 break;
 
             default:
-                throw new Error(`지원하지 않는 옵션: --${key}`);
+                throw new Error(`Unsupported option: --${key}`);
         }
     }
     return opts;
 }
 
-function parseBool(v: string, label: string): boolean {
-    const t = v.trim().toLowerCase();
-    if (t === "true") return true;
-    if (t === "false") return false;
-    throw new Error(`${label} 값 오류: ${v} (true|false)`);
+const parseBumpStrategy = (arg: string, defaultBump: BumpStrategy): BumpStrategy => {
+    if (!arg) {
+        throw new Error("Missing bump argument. e.g. bump patch");
+    }
+
+    const v = arg.trim().toLowerCase();
+
+    if (v === "+1") {
+        return defaultBump;
+    }
+
+    switch (v) {
+        case "patch":
+        case "minor":
+        case "major":
+            return v;
+        default:
+            throw new Error(`Invalid bump argument: ${arg} (patch|minor|major|+1)`);
+    }
 }
 
-function isOneOf(v: string, arr: string[]): boolean {
+
+const parseBool = (v: string, label: string): boolean => {
+    const trimmed = v.trim().toLowerCase();
+    if (trimmed === "true") {
+        return true;
+    }
+    if (trimmed === "false") {
+        return false;
+    }
+    throw new Error(`Invalid value for ${label}: ${v} (true|false)`);
+}
+
+const isOneOf = (v: string, arr: string[]): boolean => {
     return arr.includes(v.trim().toLowerCase());
 }
