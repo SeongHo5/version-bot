@@ -1,6 +1,9 @@
 name: 'Version Bot (comment-driven)'
 description: 'Bump/set project version for Maven/Gradle from PR comment'
 author: 'SeongHo5'
+branding:
+  icon: activity
+  color: orange
 inputs:
   repo-token:
     description: 'A token for the repo'
