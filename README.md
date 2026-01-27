@@ -1,1 +1,3 @@
 # version-bot
+
+Bump version
