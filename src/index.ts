@@ -78,7 +78,7 @@ async function pickUpdater(tool: Tool, prefer: Prefer) {
   if (hasGradle) return gradle;
 
   throw new Error(
-    "지원되는 빌드 파일을 찾지 못함: pom.xml 또는 gradle.properties/build.gradle(.kts)",
+    "지원되는 빌드 파일을 찾지 못함: Expected pom.xml or gradle.properties/build.gradle(.kts)",
   );
 }
 
@@ -139,7 +139,8 @@ async function run() {
     if (target) {
       const p = path.resolve(process.cwd(), target);
       if (!(await fileExists(p))) {
-        throw new Error(`--target 파일 없음: ${target}`);
+        core.setFailed(`--target 파일 없음: ${target}`);
+        return;
       }
     }
 

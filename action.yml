@@ -4,6 +4,9 @@ author: 'SeongHo5'
 branding:
   icon: activity
   color: orange
+runs:
+  using: node20
+  main: dist/index.js
 inputs:
   repo-token:
     description: 'A token for the repo'
