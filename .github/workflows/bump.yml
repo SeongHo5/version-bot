@@ -1,0 +1,33 @@
+name: version-bot
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  bump:
+    if: >
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/ver ')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run version-bot action
+        uses: SeongHo5/version-bot@0.1.0
+        with:
+          comment: ${{ github.event.comment.body }}
+          commandPrefix: /ver
+          tool: auto
