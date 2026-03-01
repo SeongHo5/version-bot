@@ -8,22 +8,46 @@ runs:
   using: node20
   main: dist/index.js
 inputs:
-  repo-token:
-    description: 'A token for the repo'
-    default: ${{ github.token }}
-    required: false
   comment:
     required: true
-    description: "Comment"
+    description: "PR comment body"
   commandPrefix:
     required: false
-    default: "/bump"
+    default: "/ver"
     description: "Command prefix"
   tool:
     required: false
     default: "auto"
-    description: "Build Tool"
+    description: "Build tool selection (auto|maven|gradle)"
+  prefer:
+    required: false
+    default: "maven"
+    description: "Preference when both Maven and Gradle are detected (maven|gradle)"
+  defaultBump:
+    required: false
+    default: "patch"
+    description: "Default bump strategy for 'bump +1' (patch|minor|major)"
+  keepSnapshot:
+    required: false
+    default: "true"
+    description: "Keep -SNAPSHOT suffix in result (true|false)"
+  dryRun:
+    required: false
+    default: "false"
+    description: "Do not write/commit/push, only log planned change (true|false)"
+  allowedAssociations:
+    required: false
+    default: "OWNER,MEMBER,COLLABORATOR"
+    description: "Allowed comment author_association CSV"
   commitMessageTemplate:
     required: false
     default: "chore(version): {tool} {before} -> {after}"
     description: "Commit message template"
+  authorName:
+    required: false
+    default: "version-bot"
+    description: "Git commit author name"
+  authorEmail:
+    required: false
+    default: "version-bot@users.noreply.github.com"
+    description: "Git commit author email"
