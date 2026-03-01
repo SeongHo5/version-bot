@@ -2,10 +2,10 @@
   "name": "version-bot",
   "version": "0.1.1",
   "description": "Version Bot",
-  "main": "src/main.ts",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && npx ncc build dist/index.js -o dist",
-    "start": "node dist/main.js",
+    "start": "node dist/index.js",
     "test": "jest"
   },
   "keywords": [],
