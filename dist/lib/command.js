@@ -118,7 +118,7 @@ const parseBumpStrategy = (arg, defaultBump) => {
     }
     const v = arg.trim().toLowerCase();
     if (v === "+1") {
-        return defaultBump;
+        return ensureBumpStrategy(defaultBump);
     }
     switch (v) {
         case "patch":
@@ -128,6 +128,15 @@ const parseBumpStrategy = (arg, defaultBump) => {
         default:
             throw new Error(`Invalid bump argument: ${arg} (patch|minor|major|+1)`);
     }
+};
+const ensureBumpStrategy = (v) => {
+    const s = String(v || "")
+        .trim()
+        .toLowerCase();
+    if (s === "patch" || s === "minor" || s === "major") {
+        return s;
+    }
+    throw new Error(`Invalid default bump strategy: ${v} (patch|minor|major)`);
 };
 const parseBool = (v, label) => {
     const trimmed = v.trim().toLowerCase();

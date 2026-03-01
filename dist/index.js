@@ -49,6 +49,8 @@ const node_path_1 = __importDefault(__nccwpck_require__(6760));
 const command_1 = __nccwpck_require__(2120);
 const git_1 = __nccwpck_require__(3725);
 const fs_1 = __nccwpck_require__(2182);
+const inputs_1 = __nccwpck_require__(260);
+const targets_1 = __nccwpck_require__(2007);
 const maven_1 = __nccwpck_require__(4487);
 const gradle_1 = __nccwpck_require__(7777);
 function getAuthorAssociation() {
@@ -66,27 +68,6 @@ function assertAllowedAssociation(allowedCsv) {
     if (!allowed.has(association)) {
         throw new Error(`권한 없음: author_association=${association}, allowed=${Array.from(allowed).join(",")}`);
     }
-}
-function normalizeBool(v) {
-    return String(v).trim().toLowerCase() === "true";
-}
-function normalizeTool(v) {
-    const t = String(v || "")
-        .trim()
-        .toLowerCase();
-    if (t === "auto" || t === "maven" || t === "gradle") {
-        return t;
-    }
-    throw new Error(`tool 옵션이 잘못됨: ${v} (auto|maven|gradle)`);
-}
-function normalizePrefer(v) {
-    const p = String(v || "")
-        .trim()
-        .toLowerCase();
-    if (p === "maven" || p === "gradle") {
-        return p;
-    }
-    throw new Error(`prefer 옵션이 잘못됨: ${v} (maven|gradle)`);
 }
 async function pickUpdater(tool, prefer) {
     const maven = new maven_1.MavenUpdater();
@@ -111,11 +92,11 @@ async function run() {
     try {
         const comment = core.getInput("comment", { required: true });
         const commandPrefix = core.getInput("commandPrefix") || "/ver";
-        const baseTool = normalizeTool(core.getInput("tool") || "auto");
-        const basePrefer = normalizePrefer(core.getInput("prefer") || "maven");
-        const defaultBump = (core.getInput("defaultBump") || "patch");
-        const baseKeepSnapshot = normalizeBool(core.getInput("keepSnapshot") || "true");
-        const baseDryRun = normalizeBool(core.getInput("dryRun") || "false");
+        const baseTool = (0, inputs_1.normalizeTool)(core.getInput("tool") || "auto");
+        const basePrefer = (0, inputs_1.normalizePrefer)(core.getInput("prefer") || "maven");
+        const defaultBump = (0, inputs_1.normalizeBump)(core.getInput("defaultBump") || "patch");
+        const baseKeepSnapshot = (0, inputs_1.normalizeBoolStrict)(core.getInput("keepSnapshot") || "true", "keepSnapshot");
+        const baseDryRun = (0, inputs_1.normalizeBoolStrict)(core.getInput("dryRun") || "false", "dryRun");
         const allowedAssociations = core.getInput("allowedAssociations") || "OWNER,MEMBER,COLLABORATOR";
         const commitMessageTemplate = core.getInput("commitMessageTemplate") ||
             "chore(version): {tool} {before} -> {after}";
@@ -128,10 +109,10 @@ async function run() {
         }
         assertAllowedAssociation(allowedAssociations);
         const tool = parsed.options.tool
-            ? normalizeTool(parsed.options.tool)
+            ? (0, inputs_1.normalizeTool)(parsed.options.tool)
             : baseTool;
         const prefer = parsed.options.prefer
-            ? normalizePrefer(parsed.options.prefer)
+            ? (0, inputs_1.normalizePrefer)(parsed.options.prefer)
             : basePrefer;
         const keepSnapshot = parsed.options.keepSnapshot != null
             ? parsed.options.keepSnapshot
@@ -145,7 +126,11 @@ async function run() {
                 return;
             }
         }
-        const updater = await pickUpdater(tool, prefer);
+        const inferredTargetTool = tool === "auto" && target ? (0, targets_1.inferToolFromTarget)(target) : null;
+        if (inferredTargetTool) {
+            core.info(`--target 기준 tool 선택: ${inferredTargetTool} (${target})`);
+        }
+        const updater = await pickUpdater(inferredTargetTool ?? tool, prefer);
         const { toolId, targetPath, before } = await updater.readCurrent({
             targetPath: target || undefined,
         });
@@ -308,7 +293,7 @@ const parseBumpStrategy = (arg, defaultBump) => {
     }
     const v = arg.trim().toLowerCase();
     if (v === "+1") {
-        return defaultBump;
+        return ensureBumpStrategy(defaultBump);
     }
     switch (v) {
         case "patch":
@@ -318,6 +303,15 @@ const parseBumpStrategy = (arg, defaultBump) => {
         default:
             throw new Error(`Invalid bump argument: ${arg} (patch|minor|major|+1)`);
     }
+};
+const ensureBumpStrategy = (v) => {
+    const s = String(v || "")
+        .trim()
+        .toLowerCase();
+    if (s === "patch" || s === "minor" || s === "major") {
+        return s;
+    }
+    throw new Error(`Invalid default bump strategy: ${v} (patch|minor|major)`);
 };
 const parseBool = (v, label) => {
     const trimmed = v.trim().toLowerCase();
@@ -370,30 +364,78 @@ exports.gitConfigUser = gitConfigUser;
 exports.gitStage = gitStage;
 exports.gitCommitPushIfChanged = gitCommitPushIfChanged;
 const node_child_process_1 = __nccwpck_require__(1421);
-function sh(cmd) {
-    (0, node_child_process_1.execSync)(cmd, { stdio: "inherit" });
+function runGit(args) {
+    (0, node_child_process_1.execFileSync)("git", args, { stdio: "inherit" });
 }
 async function gitConfigUser(name, email) {
-    sh(`git config user.name "${name}"`);
-    sh(`git config user.email "${email}"`);
+    runGit(["config", "user.name", name]);
+    runGit(["config", "user.email", email]);
 }
 async function gitStage(filePath) {
-    sh(`git add "${filePath}"`);
+    runGit(["add", "--", filePath]);
 }
 function hasDiff() {
-    try {
-        (0, node_child_process_1.execSync)("git diff --cached --quiet");
-        return false;
-    }
-    catch {
-        return true;
-    }
+    const result = (0, node_child_process_1.spawnSync)("git", ["diff", "--cached", "--quiet"], {
+        stdio: "ignore",
+    });
+    return result.status !== 0;
 }
 async function gitCommitPushIfChanged(message) {
     if (!hasDiff())
         return;
-    sh(`git commit -m "${message.replaceAll('"', '\\"')}"`);
-    sh(`git push`);
+    runGit(["commit", "-m", message]);
+    runGit(["push"]);
+}
+
+
+/***/ }),
+
+/***/ 260:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizeBoolStrict = normalizeBoolStrict;
+exports.normalizeTool = normalizeTool;
+exports.normalizePrefer = normalizePrefer;
+exports.normalizeBump = normalizeBump;
+function normalizeBoolStrict(v, label) {
+    const b = String(v || "")
+        .trim()
+        .toLowerCase();
+    if (b === "true")
+        return true;
+    if (b === "false")
+        return false;
+    throw new Error(`${label} 옵션이 잘못됨: ${v} (true|false)`);
+}
+function normalizeTool(v) {
+    const t = String(v || "")
+        .trim()
+        .toLowerCase();
+    if (t === "auto" || t === "maven" || t === "gradle") {
+        return t;
+    }
+    throw new Error(`tool 옵션이 잘못됨: ${v} (auto|maven|gradle)`);
+}
+function normalizePrefer(v) {
+    const p = String(v || "")
+        .trim()
+        .toLowerCase();
+    if (p === "maven" || p === "gradle") {
+        return p;
+    }
+    throw new Error(`prefer 옵션이 잘못됨: ${v} (maven|gradle)`);
+}
+function normalizeBump(v) {
+    const b = String(v || "")
+        .trim()
+        .toLowerCase();
+    if (b === "patch" || b === "minor" || b === "major") {
+        return b;
+    }
+    throw new Error(`defaultBump 옵션이 잘못됨: ${v} (patch|minor|major)`);
 }
 
 
@@ -446,6 +488,32 @@ function applyCommand(current, cmd, keepSnapshot) {
     if (!keepSnapshot)
         return splitSnapshot(bumped).base;
     return bumped;
+}
+
+
+/***/ }),
+
+/***/ 2007:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.inferToolFromTarget = inferToolFromTarget;
+const node_path_1 = __importDefault(__nccwpck_require__(6760));
+function inferToolFromTarget(targetPath) {
+    const base = node_path_1.default.basename(targetPath).toLowerCase();
+    if (base === "pom.xml")
+        return "maven";
+    if (base === "gradle.properties" ||
+        base === "build.gradle" ||
+        base === "build.gradle.kts") {
+        return "gradle";
+    }
+    return null;
 }
 
 
@@ -518,9 +586,9 @@ exports.GradleUpdater = GradleUpdater;
 function readFromGradleProperties(text) {
     const lines = text.split(/\r?\n/);
     for (const line of lines) {
-        const m = line.match(/^\s*version\s*=\s*([^\s#]+)\s*(?:#.*)?$/);
+        const m = line.match(/^\s*version\s*=\s*(["']?)([^"'#\s]+)\1\s*(?:#.*)?$/);
         if (m)
-            return { before: m[1].trim() };
+            return { before: m[2].trim() };
     }
     throw new Error("gradle.properties에서 version=... 라인을 찾지 못함");
 }
@@ -528,11 +596,11 @@ function writeToGradleProperties(text, next) {
     const lines = text.split(/\r?\n/);
     let changed = false;
     const out = lines.map((line) => {
-        const m = line.match(/^(\s*version\s*=\s*)([^\s#]+)(\s*(?:#.*)?)$/);
+        const m = line.match(/^(\s*version\s*=\s*)(["']?)([^"'#\s]+)(\2)(\s*(?:#.*)?)$/);
         if (!m)
             return line;
         changed = true;
-        return `${m[1]}${next}${m[3]}`;
+        return `${m[1]}${m[2]}${next}${m[4]}${m[5]}`;
     });
     if (!changed)
         throw new Error("gradle.properties에 version=... 라인이 없어 수정 불가");
@@ -541,8 +609,8 @@ function writeToGradleProperties(text, next) {
 function readFromBuildGradle(text, fileName) {
     const isKts = fileName.endsWith(".kts");
     const re = isKts
-        ? /^\s*version\s*=\s*"([^"]+)"\s*$/m
-        : /^\s*version\s*=\s*['"]([^'"]+)['"]\s*$/m;
+        ? /^\s*version\s*=\s*"([^"]+)"\s*(?:(?:\/\/|#).*)?$/m
+        : /^\s*version\s*=\s*['"]([^'"]+)['"]\s*(?:(?:\/\/|#).*)?$/m;
     const m = text.match(re);
     if (!m) {
         throw new Error(`${fileName}에서 지원되는 version 선언을 찾지 못함. ` +

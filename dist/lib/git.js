@@ -4,28 +4,25 @@ exports.gitConfigUser = gitConfigUser;
 exports.gitStage = gitStage;
 exports.gitCommitPushIfChanged = gitCommitPushIfChanged;
 const node_child_process_1 = require("node:child_process");
-function sh(cmd) {
-    (0, node_child_process_1.execSync)(cmd, { stdio: "inherit" });
+function runGit(args) {
+    (0, node_child_process_1.execFileSync)("git", args, { stdio: "inherit" });
 }
 async function gitConfigUser(name, email) {
-    sh(`git config user.name "${name}"`);
-    sh(`git config user.email "${email}"`);
+    runGit(["config", "user.name", name]);
+    runGit(["config", "user.email", email]);
 }
 async function gitStage(filePath) {
-    sh(`git add "${filePath}"`);
+    runGit(["add", "--", filePath]);
 }
 function hasDiff() {
-    try {
-        (0, node_child_process_1.execSync)("git diff --cached --quiet");
-        return false;
-    }
-    catch {
-        return true;
-    }
+    const result = (0, node_child_process_1.spawnSync)("git", ["diff", "--cached", "--quiet"], {
+        stdio: "ignore",
+    });
+    return result.status !== 0;
 }
 async function gitCommitPushIfChanged(message) {
     if (!hasDiff())
         return;
-    sh(`git commit -m "${message.replaceAll('"', '\\"')}"`);
-    sh(`git push`);
+    runGit(["commit", "-m", message]);
+    runGit(["push"]);
 }

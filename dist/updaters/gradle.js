@@ -61,9 +61,9 @@ exports.GradleUpdater = GradleUpdater;
 function readFromGradleProperties(text) {
     const lines = text.split(/\r?\n/);
     for (const line of lines) {
-        const m = line.match(/^\s*version\s*=\s*([^\s#]+)\s*(?:#.*)?$/);
+        const m = line.match(/^\s*version\s*=\s*(["']?)([^"'#\s]+)\1\s*(?:#.*)?$/);
         if (m)
-            return { before: m[1].trim() };
+            return { before: m[2].trim() };
     }
     throw new Error("gradle.properties에서 version=... 라인을 찾지 못함");
 }
@@ -71,11 +71,11 @@ function writeToGradleProperties(text, next) {
     const lines = text.split(/\r?\n/);
     let changed = false;
     const out = lines.map((line) => {
-        const m = line.match(/^(\s*version\s*=\s*)([^\s#]+)(\s*(?:#.*)?)$/);
+        const m = line.match(/^(\s*version\s*=\s*)(["']?)([^"'#\s]+)(\2)(\s*(?:#.*)?)$/);
         if (!m)
             return line;
         changed = true;
-        return `${m[1]}${next}${m[3]}`;
+        return `${m[1]}${m[2]}${next}${m[4]}${m[5]}`;
     });
     if (!changed)
         throw new Error("gradle.properties에 version=... 라인이 없어 수정 불가");
@@ -84,8 +84,8 @@ function writeToGradleProperties(text, next) {
 function readFromBuildGradle(text, fileName) {
     const isKts = fileName.endsWith(".kts");
     const re = isKts
-        ? /^\s*version\s*=\s*"([^"]+)"\s*$/m
-        : /^\s*version\s*=\s*['"]([^'"]+)['"]\s*$/m;
+        ? /^\s*version\s*=\s*"([^"]+)"\s*(?:(?:\/\/|#).*)?$/m
+        : /^\s*version\s*=\s*['"]([^'"]+)['"]\s*(?:(?:\/\/|#).*)?$/m;
     const m = text.match(re);
     if (!m) {
         throw new Error(`${fileName}에서 지원되는 version 선언을 찾지 못함. ` +
