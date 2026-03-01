@@ -47,6 +47,12 @@ describe("parseCommandLine", () => {
     ).toThrow("Unsupported option");
   });
 
+  it("throws when defaultBump is invalid for bump +1", () => {
+    expect(() =>
+      parseCommandLine("/ver bump +1", "/ver", "foo" as any),
+    ).toThrow("Invalid default bump strategy");
+  });
+
   it("throws on unclosed quote", () => {
     expect(() =>
       parseCommandLine('/ver set 1.2.3 --target "a/b', "/ver", "patch"),

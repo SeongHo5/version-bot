@@ -1,29 +1,27 @@
-import { execSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
-function sh(cmd: string) {
-  execSync(cmd, { stdio: "inherit" });
+function runGit(args: string[]) {
+  execFileSync("git", args, { stdio: "inherit" });
 }
 
 export async function gitConfigUser(name: string, email: string) {
-  sh(`git config user.name "${name}"`);
-  sh(`git config user.email "${email}"`);
+  runGit(["config", "user.name", name]);
+  runGit(["config", "user.email", email]);
 }
 
 export async function gitStage(filePath: string) {
-  sh(`git add "${filePath}"`);
+  runGit(["add", "--", filePath]);
 }
 
 function hasDiff(): boolean {
-  try {
-    execSync("git diff --cached --quiet");
-    return false;
-  } catch {
-    return true;
-  }
+  const result = spawnSync("git", ["diff", "--cached", "--quiet"], {
+    stdio: "ignore",
+  });
+  return result.status !== 0;
 }
 
 export async function gitCommitPushIfChanged(message: string) {
   if (!hasDiff()) return;
-  sh(`git commit -m "${message.replaceAll('"', '\\"')}"`);
-  sh(`git push`);
+  runGit(["commit", "-m", message]);
+  runGit(["push"]);
 }

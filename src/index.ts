@@ -5,12 +5,21 @@ import path from "node:path";
 import { parseCommandLine, ParsedLine } from "./lib/command";
 import { gitCommitPushIfChanged, gitConfigUser, gitStage } from "./lib/git";
 import { fileExists } from "./lib/fs";
+import {
+  normalizeBoolStrict,
+  normalizeBump,
+  normalizePrefer,
+  normalizeTool,
+  PreferInput,
+  ToolInput,
+} from "./lib/inputs";
+import { inferToolFromTarget } from "./lib/targets";
 
 import { MavenUpdater } from "./updaters/maven";
 import { GradleUpdater } from "./updaters/gradle";
 
-type Tool = "auto" | "maven" | "gradle";
-type Prefer = "maven" | "gradle";
+type Tool = ToolInput;
+type Prefer = PreferInput;
 
 function getAuthorAssociation(): string {
   const association =
@@ -33,30 +42,6 @@ function assertAllowedAssociation(allowedCsv: string) {
       `권한 없음: author_association=${association}, allowed=${Array.from(allowed).join(",")}`,
     );
   }
-}
-
-function normalizeBool(v: string): boolean {
-  return String(v).trim().toLowerCase() === "true";
-}
-
-function normalizeTool(v: string): Tool {
-  const t = String(v || "")
-    .trim()
-    .toLowerCase();
-  if (t === "auto" || t === "maven" || t === "gradle") {
-    return t;
-  }
-  throw new Error(`tool 옵션이 잘못됨: ${v} (auto|maven|gradle)`);
-}
-
-function normalizePrefer(v: string): Prefer {
-  const p = String(v || "")
-    .trim()
-    .toLowerCase();
-  if (p === "maven" || p === "gradle") {
-    return p;
-  }
-  throw new Error(`prefer 옵션이 잘못됨: ${v} (maven|gradle)`);
 }
 
 async function pickUpdater(tool: Tool, prefer: Prefer) {
@@ -90,14 +75,15 @@ async function run() {
     // workflow/action input 기본값 (코멘트 옵션으로 override 가능)
     const baseTool = normalizeTool(core.getInput("tool") || "auto");
     const basePrefer = normalizePrefer(core.getInput("prefer") || "maven");
-    const defaultBump = (core.getInput("defaultBump") || "patch") as
-      | "patch"
-      | "minor"
-      | "major";
-    const baseKeepSnapshot = normalizeBool(
+    const defaultBump = normalizeBump(core.getInput("defaultBump") || "patch");
+    const baseKeepSnapshot = normalizeBoolStrict(
       core.getInput("keepSnapshot") || "true",
+      "keepSnapshot",
     );
-    const baseDryRun = normalizeBool(core.getInput("dryRun") || "false");
+    const baseDryRun = normalizeBoolStrict(
+      core.getInput("dryRun") || "false",
+      "dryRun",
+    );
 
     const allowedAssociations =
       core.getInput("allowedAssociations") || "OWNER,MEMBER,COLLABORATOR";
@@ -144,7 +130,14 @@ async function run() {
       }
     }
 
-    const updater = await pickUpdater(tool, prefer);
+    const inferredTargetTool =
+      tool === "auto" && target ? inferToolFromTarget(target) : null;
+
+    if (inferredTargetTool) {
+      core.info(`--target 기준 tool 선택: ${inferredTargetTool} (${target})`);
+    }
+
+    const updater = await pickUpdater(inferredTargetTool ?? tool, prefer);
 
     const { toolId, targetPath, before } = await updater.readCurrent({
       targetPath: target || undefined,
