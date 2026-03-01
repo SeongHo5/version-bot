@@ -16,6 +16,16 @@ PR 코멘트 한 줄로 Maven/Gradle 버전을 올리거나 지정 버전으로 
 - Gradle: `build.gradle`
 - Gradle: `build.gradle.kts`
 
+## 지원 패턴
+- Maven
+  - `<properties><revision>...</revision></properties>` 우선
+  - 없으면 `<project><version>...</version></project>`
+- Gradle `gradle.properties`
+  - `version=1.2.3` 형식 (`#` 주석 허용)
+- Gradle `build.gradle(.kts)`
+  - 단일 라인 `version = "1.2.3"` 또는 `version = '1.2.3'`
+  - 후행 `//` 또는 `#` 주석 허용
+
 ## 빠른 시작
 1. 리포지토리에 워크플로우 파일을 만듭니다. 예: `.github/workflows/version-bot.yml`
 2. 아래 예시를 붙여 넣고 `uses` 버전을 원하는 태그로 맞춥니다.
@@ -66,6 +76,11 @@ jobs:
           allowedAssociations: OWNER,MEMBER,COLLABORATOR
 ```
 
+주의:
+- 위 예시는 PR head 브랜치에 직접 push 가능한 경우를 전제로 합니다.
+- 포크 PR, 브랜치 보호 규칙, 권한 제한 상황에서는 `git push`가 실패할 수 있습니다.
+- 반드시 `permissions.contents: write`가 필요하며, 필요 시 fork PR은 dry-run 또는 별도 처리 정책을 두세요.
+
 ## 명령 사용법
 액션은 코멘트 **첫 줄만** 읽습니다.
 
@@ -114,6 +129,10 @@ jobs:
 - 기본적으로 `OWNER`, `MEMBER`, `COLLABORATOR`만 허용됩니다.
 - 외부 기여자 코멘트를 허용하려면 `allowedAssociations`를 명시적으로 변경하세요.
 - 이 액션은 커밋/푸시를 수행하므로 workflow `permissions.contents: write`가 필요합니다.
+
+## 제약사항
+- `--tool auto` + `--target` 사용 시, 파일명이 지원 대상(`pom.xml`, `gradle.properties`, `build.gradle`, `build.gradle.kts`)이면 해당 도구를 우선 선택합니다.
+- Maven(`pom.xml`)은 버전 쓰기 시 XML이 재직렬화되므로 코멘트/일부 포맷이 정리될 수 있습니다.
 
 ## 실행 결과
 - 변경이 있으면 지정 파일 1개를 수정하고 커밋/푸시합니다.
